@@ -12,6 +12,6 @@ pub struct Args {
     // TODO allow specification of what fixes to apply?
 }
 
-pub fn run(args: Args) -> Result<()> {
+pub fn run(_args: Args) -> Result<()> {
     Ok(())
 }

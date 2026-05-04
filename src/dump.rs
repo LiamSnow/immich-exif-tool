@@ -1,5 +1,4 @@
-use crate::immich::ImmichClient;
-use crate::immich::types::{AlbumDetail, AssetResponse, ServerAbout};
+use crate::immich::{AlbumDetail, AssetResponse, ImmichClient, ServerAbout};
 use anyhow::{Context, Result};
 use console::style;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};

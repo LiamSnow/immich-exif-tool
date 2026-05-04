@@ -15,7 +15,7 @@ pub struct AssetResponse {
     pub is_favorite: bool,
     pub is_trashed: bool,
     pub is_archived: bool,
-    pub exif_info: Option<ExifInfo>,
+    pub exif_info: Option<AssetExif>,
     #[serde(flatten)]
     pub extra: HashMap<String, Value>,
 }
@@ -34,7 +34,7 @@ pub enum AssetType {
 /// [Docs](https://api.immich.app/models/ExifResponseDto)
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ExifInfo {
+pub struct AssetExif {
     pub date_time_original: Option<String>,
 
     pub latitude: Option<f64>,
@@ -104,4 +104,13 @@ pub struct PeopleResponse {
     pub hidden: u64,
     pub has_next_page: bool,
     pub people: Vec<Value>,
+}
+
+impl AssetExif {
+    pub fn gps(&self) -> Option<(f64, f64)> {
+        match (self.latitude, self.longitude) {
+            (Some(lat), Some(long)) => Some((lat, long)),
+            (_, _) => None,
+        }
+    }
 }

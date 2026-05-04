@@ -8,7 +8,7 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 pub mod types;
-use types::*;
+pub use types::*;
 
 pub struct ImmichClient {
     client: Client,

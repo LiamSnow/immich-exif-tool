@@ -2,6 +2,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 mod dump;
+mod exiftool;
 mod fix;
 mod immich;
 mod scan;
