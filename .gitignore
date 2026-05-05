@@ -1,4 +1,4 @@
 /target
 /.env
-/dump.json
-/fixes.json
+/immich_data.json
+/plan.json

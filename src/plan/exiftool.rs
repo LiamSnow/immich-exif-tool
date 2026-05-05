@@ -1,10 +1,11 @@
 use anyhow::{Context, Result};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use std::{
     collections::BTreeSet,
     path::{Path, PathBuf},
     process::Command,
+    sync::atomic::{AtomicU32, Ordering},
 };
 use walkdir::WalkDir;
 
@@ -18,26 +19,36 @@ pub struct AssetExif {
     pub gps_latitude: Option<f64>,
     #[serde(rename = "GPSLongitude")]
     pub gps_longitude: Option<f64>,
-    #[serde(rename = "Description")]
+    #[serde(
+        rename = "Description",
+        default,
+        deserialize_with = "empty_string_as_none"
+    )]
     pub description: Option<String>,
 }
 
-/// Runs `exiftool` in parallel on all cores by running
-/// it on each subdirectory which contains assets
-pub fn run(dir: &str) -> Result<Vec<AssetExif>> {
+/// Runs `exiftool` in parallel across all subdirectories containing files.
+/// Calls `on_progress(completed, total)` after each directory finishes.
+pub fn run(dir: &str, on_progress: impl Fn(u32, u32) + Sync) -> Result<Vec<AssetExif>> {
     let subdirs = find_subdirs_with_files(dir);
+    let total = subdirs.len() as u32;
+    let completed = AtomicU32::new(0);
+
     Ok(subdirs
         .par_iter()
-        .map(|subdir| run_once(subdir))
+        .map(|subdir| {
+            let result = run_once(subdir);
+            let n = completed.fetch_add(1, Ordering::Relaxed) + 1;
+            on_progress(n, total);
+            result
+        })
         .collect::<Result<Vec<Vec<AssetExif>>>>()?
         .into_iter()
         .flatten()
         .collect())
 }
 
-/// Runs `exiftool` for a given file or directory
-/// Returns date, location, and description in a structured response
-/// If `path` is a directory, it **will not** recursively follow subdirectories
+/// Runs `exiftool` for a given file or directory (non-recursive)
 fn run_once(path: &Path) -> Result<Vec<AssetExif>> {
     let output = Command::new("exiftool")
         .args([
@@ -59,7 +70,7 @@ fn run_once(path: &Path) -> Result<Vec<AssetExif>> {
     serde_json::from_slice(&output.stdout).context("failed to parse exiftool output")
 }
 
-/// Returns every subdirectory in a directory which contains a file
+/// Returns every subdirectory that contains at least one file
 fn find_subdirs_with_files(base: &str) -> Vec<PathBuf> {
     WalkDir::new(base)
         .into_iter()
@@ -84,4 +95,12 @@ impl AssetExif {
             (_, _) => None,
         }
     }
+}
+
+pub fn empty_string_as_none<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = Option::<String>::deserialize(deserializer)?;
+    Ok(s.filter(|s| !s.is_empty()))
 }

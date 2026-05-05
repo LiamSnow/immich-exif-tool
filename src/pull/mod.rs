@@ -1,14 +1,15 @@
-use crate::immich::{AlbumDetail, AssetResponse, ImmichClient, ServerAbout};
+use crate::progress::Row;
 use anyhow::{Context, Result};
 use console::style;
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use immich::ImmichClient;
+use indicatif::MultiProgress;
 use std::collections::BTreeMap;
-use std::fs::File;
-use std::time::Duration;
+use std::fs;
+use std::path::PathBuf;
 
-const LABEL_WIDTH: usize = 13;
+pub mod file;
+pub use file::*;
+mod immich;
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -25,37 +26,8 @@ pub struct Args {
     pub remote_path: String,
 
     /// Output file path
-    #[arg(short, long, default_value = "dump.json")]
-    pub output: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DumpFile {
-    pub dumped_at: String,
-    pub server_url: String,
-    pub remote_path: String,
-
-    pub server: ServerAbout,
-    pub config: Value,
-    pub users: Vec<Value>,
-    pub tags: Vec<Value>,
-    pub people: Vec<Value>,
-    pub stacks: Vec<Value>,
-    pub map_markers: Vec<Value>,
-
-    pub albums: Vec<AlbumDump>,
-
-    /// Keyed by relative path (original path with `remote_path` stripped)
-    pub assets: BTreeMap<String, AssetResponse>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AlbumDump {
-    #[serde(flatten)]
-    pub album: AlbumDetail,
-    pub activities: Vec<Value>,
+    #[arg(short, long, default_value = "immich_data.json")]
+    pub output: PathBuf,
 }
 
 pub fn run(args: Args) -> Result<()> {
@@ -107,8 +79,8 @@ pub fn run(args: Args) -> Result<()> {
     let (assets, asset_errors) = fetch_assets(&client, &mp, &paths, &prefix, row_assets);
     let (albums, album_errors) = fetch_albums(&client, &mp, row_albums);
 
-    let dump = DumpFile {
-        dumped_at: jiff::Zoned::now().to_string(),
+    let out = file::File {
+        pulled_at: jiff::Zoned::now().to_string(),
         server_url: args.server_url,
         remote_path: remote_path.to_string(),
         server,
@@ -122,12 +94,12 @@ pub fn run(args: Args) -> Result<()> {
         assets,
     };
 
-    let file =
-        File::create(&args.output).with_context(|| format!("failed to create {}", &args.output))?;
-    serde_json::to_writer_pretty(file, &dump)
-        .with_context(|| format!("failed to write {}", &args.output))?;
+    let file = fs::File::create(&args.output)
+        .with_context(|| format!("failed to create {:?}", &args.output))?;
+    serde_json::to_writer_pretty(file, &out)
+        .with_context(|| format!("failed to write {:?}", &args.output))?;
 
-    row_writing.finish(&args.output);
+    row_writing.finish(&args.output.to_string_lossy());
 
     let total_errors = asset_errors + album_errors;
     println!();
@@ -150,7 +122,7 @@ fn fetch_assets(
     paths: &[&String],
     prefix: &str,
     row: Row,
-) -> (BTreeMap<String, AssetResponse>, u32) {
+) -> (BTreeMap<String, Asset>, u32) {
     let mut assets = BTreeMap::new();
     let mut errors = 0u32;
 
@@ -189,7 +161,7 @@ fn fetch_assets(
     (assets, errors)
 }
 
-fn fetch_albums(client: &ImmichClient, mp: &MultiProgress, row: Row) -> (Vec<AlbumDump>, u32) {
+fn fetch_albums(client: &ImmichClient, mp: &MultiProgress, row: Row) -> (Vec<Album>, u32) {
     let album_list = match client.albums() {
         Ok(list) => list,
         Err(e) => {
@@ -220,7 +192,7 @@ fn fetch_albums(client: &ImmichClient, mp: &MultiProgress, row: Row) -> (Vec<Alb
         };
 
         let activities = client.activities(&summary.id).unwrap_or_default();
-        albums.push(AlbumDump {
+        albums.push(Album {
             album: detail,
             activities,
         });
@@ -228,45 +200,4 @@ fn fetch_albums(client: &ImmichClient, mp: &MultiProgress, row: Row) -> (Vec<Alb
 
     row.finish(&albums.len().to_string());
     (albums, errors)
-}
-
-struct Row {
-    label: String,
-    sp: ProgressBar,
-}
-
-impl Row {
-    fn new(mp: &MultiProgress, label: &str) -> Self {
-        let bar = mp.add(ProgressBar::new_spinner());
-        bar.set_style(
-            ProgressStyle::default_spinner()
-                .template("  {spinner:.cyan} {msg}")
-                .unwrap(),
-        );
-        bar.enable_steady_tick(Duration::from_millis(80));
-        bar.set_message(format!("{:<LABEL_WIDTH$}", label));
-        Self {
-            label: label.to_string(),
-            sp: bar,
-        }
-    }
-
-    fn update(&self, value: &str) {
-        self.sp
-            .set_message(format!("{:<LABEL_WIDTH$} {}", self.label, value,));
-    }
-
-    fn finish(self, value: &str) {
-        self.sp.set_style(
-            ProgressStyle::default_spinner()
-                .template("  {msg}")
-                .unwrap(),
-        );
-        self.sp.finish_with_message(format!(
-            "{} {:<LABEL_WIDTH$} {}",
-            style("✓").green(),
-            self.label,
-            value,
-        ));
-    }
 }

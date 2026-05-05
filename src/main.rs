@@ -1,11 +1,10 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-mod dump;
-mod exiftool;
-mod fix;
-mod immich;
-mod scan;
+mod apply;
+mod plan;
+mod progress;
+mod pull;
 
 #[derive(Parser)]
 #[command(name = "immich-exif-tool")]
@@ -16,14 +15,14 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Dump all metadata from an Immich instance to a JSON file
-    Dump(dump::Args),
+    /// Pull all metadata from an Immich instance to a JSON file
+    Pull(pull::Args),
 
-    /// Scan local files, comparing against dumped metadata
-    Scan(scan::Args),
+    /// Plan changes to local assets from Immich metadata
+    Plan(plan::Args),
 
-    /// Apply fixes to local files
-    Fix(fix::Args),
+    /// Apply changes local assets
+    Apply(apply::Args),
 }
 
 fn main() -> Result<()> {
@@ -31,8 +30,8 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Command::Dump(args) => dump::run(args),
-        Command::Scan(args) => scan::run(args),
-        Command::Fix(args) => fix::run(args),
+        Command::Pull(args) => pull::run(args),
+        Command::Plan(args) => plan::run(args),
+        Command::Apply(args) => apply::run(args),
     }
 }

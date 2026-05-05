@@ -2,13 +2,11 @@
 //! Only provides structure where needed for version compatibility
 //! [Docs](https://api.immich.app/introduction)
 
+use crate::pull::file::{AlbumDetail, AlbumResponse, Asset, PeopleResponse, ServerAbout};
 use anyhow::{Context, Result, bail};
 use reqwest::blocking::Client;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
-
-pub mod types;
-pub use types::*;
 
 pub struct ImmichClient {
     client: Client,
@@ -50,7 +48,7 @@ impl ImmichClient {
     }
 
     /// [Docs](https://api.immich.app/endpoints/views/getAssetsByOriginalPath)
-    pub fn folder_assets(&self, path: &str) -> Result<Vec<AssetResponse>> {
+    pub fn folder_assets(&self, path: &str) -> Result<Vec<Asset>> {
         let encoded = urlencoding::encode(path);
         self.get(&format!("/view/folder?path={}", encoded))
     }
